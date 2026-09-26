@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.pytest_cache/
+.waardering_cache/
+waardering_keuzes.json
+# klantdossiers en resultaten nooit committen
+*.pdf
+*.xlsx
+!template/Waardering_template.xlsx
+*.waarden.json
