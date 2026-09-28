@@ -187,3 +187,31 @@ def test_keten_zoals_het_venster(tmp_path, monkeypatch):
     import openpyxl
     wb = openpyxl.load_workbook(uit, data_only=True)                     # berekende waarden staan in het bestand
     assert wb['weerhouden waarde']['D82'].value == res['weerhouden waarde']
+
+
+def test_tussentijdse_datum_uit_bestandsnaam():
+    r = resultaat(2026, 200000, tussentijds=True)
+    r['periodes'][0]['periode_begin'] = ''
+    r['periodes'][0]['periode_einde'] = '2026-06-29'                       # afdrukdatum
+    r['_bestand'] = 'Testbedrijf - voorlopige cijfers per 31052026.pdf'
+    d = samenstellen([resultaat(2025, 450000), r])
+    p = [p for p in d.periodes if p.tussentijds][0]
+    assert p.einde == dt.date(2026, 5, 31) and p.begin == dt.date(2026, 1, 1) and p.maanden == 5
+
+
+@pytest.mark.skipif(not shutil.which('soffice'), reason='LibreOffice nodig om te herberekenen')
+def test_vervangingshuur_maakt_vastgoed_overtollig(dossier, tmp_path):
+    uitkomst = {}
+    for huur in (None, 12000):
+        b = voorstel(dossier)
+        b.multiple = 4.5
+        b.marktconforme_huur = huur
+        uit = tmp_path / f'huur{huur}.xlsx'
+        inv = Invuller(TEMPLATE, dossier, b, tmp_path / f'werk{huur}')
+        inv.vul(uit)
+        w = herberekenen.met_libreoffice(uit)
+        assert w and not herberekenen.controles(w, b.kolommen, True, 297000)[1]
+        uitkomst[huur] = w['Goodwill']
+    # vastgoed (22) aan boekwaarde 150.000 bij de overtollige activa, enkel met vervangingshuur
+    assert uitkomst[12000]['E42'] == pytest.approx(uitkomst[None]['E42'] + 150000)
+    assert uitkomst[12000]['D11'] == pytest.approx(uitkomst[None]['D11'] - 150000)

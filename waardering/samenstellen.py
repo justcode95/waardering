@@ -19,6 +19,17 @@ def _datum(s: str) -> dt.date | None:
     return None
 
 
+def _datum_in_naam(naam: str) -> dt.date | None:
+    """'voorlopige cijfers per 31052026.pdf' → 2026-05-31."""
+    m = re.search(r'per[\s_-]*(\d{2})[.\-/]?(\d{2})[.\-/]?(\d{4})', naam, re.I)
+    if not m:
+        return None
+    try:
+        return dt.date(int(m[3]), int(m[2]), int(m[1]))
+    except ValueError:
+        return None
+
+
 def samenstellen(resultaten: list[dict]) -> Dossier:
     d = Dossier()
     volgorde = sorted(resultaten, key=lambda r: r['documenttype'] != 'jaarrekening_of_fiscale_bundel')
@@ -44,7 +55,14 @@ def samenstellen(resultaten: list[dict]) -> Dossier:
                         continue
                     reks[nr] = round(reks.get(nr, 0.0) + x['saldo'], 2)
                     titels.setdefault(nr, x['omschrijving'])
-            nieuw = Periode(begin=_datum(p['periode_begin']), einde=einde, tussentijds=p['tussentijds'],
+            begin = _datum(p['periode_begin'])
+            if p['tussentijds']:
+                # de einddatum ontbreekt soms op het document en wordt dan de afdrukdatum; de bestandsnaam
+                # ('… per 31052026') is betrouwbaarder
+                in_naam = _datum_in_naam(r.get('_bestand', ''))
+                if in_naam and in_naam < einde and (not begin or in_naam > begin):
+                    einde = in_naam
+            nieuw = Periode(begin=begin, einde=einde, tussentijds=p['tussentijds'],
                             rekeningen=reks, titels=titels,
                             bedrijfswinst=p['bedrijfswinst'] or None,
                             winst_voor_belasting=p['winst_voor_belasting'] or None,
@@ -74,6 +92,10 @@ def samenstellen(resultaten: list[dict]) -> Dossier:
                     d.aandeelhouders.append(pers)
 
     for p in d.periodes:
+        if p.tussentijds and not p.begin:        # begint de dag na het laatste afgesloten boekjaar
+            vorige = [q.einde for q in d.periodes if not q.tussentijds and q.einde < p.einde]
+            if vorige:
+                p.begin = max(vorige) + dt.timedelta(days=1)
         controleer_periode(p, d.meldingen)
     return d
 

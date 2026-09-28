@@ -60,6 +60,11 @@ def getal(x: float) -> str:
     return f'{x:.2f}'.rstrip('0').rstrip('.') or '0'
 
 
+def vastgoed_overtollig(afsl, b) -> bool:
+    """Met een vervangingshuur wordt eigen vastgoed (22) als overtollig actief gewaardeerd."""
+    return bool(b.marktconforme_huur) and afsl.som('22') > 0
+
+
 def som_formule(waarden: list[float], teken: int = 1, factor: str | None = None) -> str | None:
     """=a+b-c; teken -1 geeft =-(a+b); factor voegt *R$11 toe."""
     waarden = [w for w in waarden if abs(w) > 0.004]
@@ -238,6 +243,10 @@ class Invuller:
         if self.afsl.som('22') > 0 and not b.marktconforme_huur:
             f.set('B95', 'De vennootschap is eigenaar van het bedrijfspand. Er wordt geen huur aan een verbonden '
                          'partij betaald; bijgevolg is geen vervangingshuur van toepassing.')
+        elif b.marktconforme_huur and self.afsl.som('22') > 0:
+            f.set('B95', f'Er wordt een marktconforme vervangingshuur van {eur(b.marktconforme_huur)} EUR per jaar '
+                         f'aangerekend. Het onroerend goed wordt bijgevolg als overtollig actief beschouwd (zie '
+                         f'goodwill, overtollige activa).')
         elif b.marktconforme_huur:
             f.set('B95', f'De huur wordt genormaliseerd naar een marktconforme huur van '
                          f'{eur(b.marktconforme_huur)} EUR per jaar.')
@@ -369,6 +378,13 @@ class Invuller:
         g.set('C16', b.vereist_rendement if b.vereist_rendement is not None else '=E31')
         g.set('A42', f'(3) Overtollige activa en passiva worden als volgt berekend (toestand per '
                      f'{b.afsluitdatum.strftime("%d/%m/%Y")}):')
+        if vastgoed_overtollig(a, b):
+            # vervangingshuur aangerekend: het eigen vastgoed hoort niet meer bij de bedrijfsmiddelen
+            g.set('B43', 'Onroerend goed (vervangingshuur aangerekend)')
+            g.set('D43', f'=MVA!K{self.nr(33)}')
+            if not b.vastgoed_marktwaarde:
+                self.meldingen.append('Vervangingshuur aangerekend: het onroerend goed staat als overtollig actief '
+                                      'aan boekwaarde; vul de venale waarde in (schattingsverslag).')
         g.set('D46', som('412'))
         g.set('D47', som_formule([-v for _, v in a.items('450')]) or 0)
         rc = [(k, v) for k, v in a.items('17', '41', '48') if RC_PATROON.search(a.titels.get(k, ''))]

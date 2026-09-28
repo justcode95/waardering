@@ -42,6 +42,11 @@ def lees_dossier(map_: Path, cfg: dict, log: Callable[[str], None]) -> tuple[Dos
         try:
             vorige = Beslissingen.van_json(json.loads(oude.read_text(encoding='utf-8')))
             if vorige.afsluitdatum in [p.einde for p in d.periodes]:
+                for k, datum in vorige.kolommen.items():   # periode intussen anders gedateerd: voorstel nemen
+                    if datum and d.periode_op(datum) is None:
+                        vorige.kolommen[k] = b.kolommen.get(k)
+                        if not vorige.kolommen[k]:
+                            vorige.weging[k] = 0
                 b = vorige
                 log('Keuzes van een vorige run geladen.')
         except (KeyError, ValueError, TypeError):

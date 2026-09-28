@@ -26,7 +26,9 @@ def schrijf(pad: Path, d: Dossier, b: Beslissingen, ok: list, fout: list, result
     r += ['', '## Keuzes', '',
           f'- Bestuurdersvergoeding: ' + (f'{eur(b.bestuurdersvergoeding)} EUR per jaar (618 volledig vervangen)'
                                            if b.bestuurdersvergoeding else 'geen normalisatie'),
-          f'- Vervangingshuur: ' + (f'{eur(b.marktconforme_huur)} EUR per jaar' if b.marktconforme_huur else 'geen'),
+          f'- Vervangingshuur: ' + (f'{eur(b.marktconforme_huur)} EUR per jaar' if b.marktconforme_huur else 'geen')
+          + (' – onroerend goed als overtollig actief' if b.marktconforme_huur and d.periode_op(b.afsluitdatum)
+             and d.periode_op(b.afsluitdatum).som('22') > 0 else ''),
           f'- Multiple: {str(b.multiple).replace(".", ",") if b.multiple else "NIET INGEVULD"} '
           f'{("(" + b.multiple_bron + ")") if b.multiple_bron else ""}',
           f'- Onroerend goed: ' + (f'venale waarde {eur(b.vastgoed_marktwaarde)} EUR ({b.vastgoed_schatting_datum})'
