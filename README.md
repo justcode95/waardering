@@ -35,7 +35,7 @@ aanschafwaarde = afschrijvingstabel, MVA netto boekwaarde = balans, balanstotaal
 
 1. Installeer Python 3.11 of nieuwer van python.org (vink *Add python.exe to PATH* aan).
 2. In deze map: `pip install -r requirements.txt`
-3. Starten: `python -m waardering`
+3. Starten: dubbelklik `Waardering starten.bat` (of in PowerShell in deze map: `python -m waardering`)
 
 Eenmalig: klik **Instellingen…** en vul je Anthropic API-sleutel in (aan te maken op console.anthropic.com; betalen
 per gebruik, los van een Claude-abonnement). De sleutel wordt bewaard in `%APPDATA%\Waardering\config.json`.
