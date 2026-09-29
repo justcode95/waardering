@@ -215,3 +215,27 @@ def test_vervangingshuur_maakt_vastgoed_overtollig(dossier, tmp_path):
     # vastgoed (22) aan boekwaarde 150.000 bij de overtollige activa, enkel met vervangingshuur
     assert uitkomst[12000]['E42'] == pytest.approx(uitkomst[None]['E42'] + 150000)
     assert uitkomst[12000]['D11'] == pytest.approx(uitkomst[None]['D11'] - 150000)
+
+
+def test_document_zonder_rekeningnummers():
+    from waardering.uitlezen import zonder_nummers
+    leeg = resultaat(2024, 400000)
+    for rub in leeg['periodes'][0]['rubrieken']:
+        for x in rub['rekeningen']:
+            x['nummer'] = ''
+    assert zonder_nummers(leeg)                                           # oude uitlezing → opnieuw lezen
+    d = samenstellen([leeg])
+    assert not d.periodes and any('zonder rekeningnummers' in m for m in d.meldingen)
+    toegekend = resultaat(2024, 400000)
+    for rub in toegekend['periodes'][0]['rubrieken']:
+        for x in rub['rekeningen']:
+            x['nummer_toegekend'] = True
+    assert not zonder_nummers(toegekend)
+    d = samenstellen([toegekend])
+    assert d.periodes and any('nummers toegekend' in m for m in d.meldingen)
+
+
+def test_lege_omzet_is_een_fout():
+    w = {'Gecorrigeerde vrije cash flow': {'H12': 0, 'V58': 'OK'}}
+    ok, fout = herberekenen.controles(w, {'H': dt.date(2025, 12, 31)}, False, None)
+    assert fout and 'Omzet' in fout[0] and not ok

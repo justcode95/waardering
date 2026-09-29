@@ -47,14 +47,22 @@ def samenstellen(resultaten: list[dict]) -> Dossier:
             einde = _datum(p['periode_einde'])
             if not einde or not p['rubrieken']:
                 continue
-            reks, titels = {}, {}
+            reks, titels, toegekend = {}, {}, 0
             for rub in p['rubrieken']:
                 for x in rub['rekeningen']:
                     nr = re.sub(r'\D', '', x['nummer'])
                     if not nr:
                         continue
+                    toegekend += bool(x.get('nummer_toegekend'))
                     reks[nr] = round(reks.get(nr, 0.0) + x['saldo'], 2)
                     titels.setdefault(nr, x['omschrijving'])
+            bron = r.get('_bestand', '?')
+            if not reks:
+                d.meldingen.append(f'{bron}: periode t.e.m. {einde} zonder rekeningnummers – niet gebruikt.')
+                continue
+            if toegekend:
+                d.meldingen.append(f'{bron}: geen rekeningnummers op het document; {toegekend} nummers toegekend '
+                                   f'op basis van de omschrijving – indeling nakijken.')
             begin = _datum(p['periode_begin'])
             if p['tussentijds']:
                 # de einddatum ontbreekt soms op het document en wordt dan de afdrukdatum; de bestandsnaam

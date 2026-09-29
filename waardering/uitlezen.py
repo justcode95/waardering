@@ -19,8 +19,9 @@ PRIJS_PER_MTOK = {'claude-opus-5': (5.0, 25.0), 'claude-opus-5-5': (4.0, 20.0), 
 
 _REK = {
     'type': 'object',
-    'properties': {'nummer': {'type': 'string'}, 'omschrijving': {'type': 'string'}, 'saldo': {'type': 'number'}},
-    'required': ['nummer', 'omschrijving', 'saldo'], 'additionalProperties': False}
+    'properties': {'nummer': {'type': 'string'}, 'omschrijving': {'type': 'string'}, 'saldo': {'type': 'number'},
+                   'nummer_toegekend': {'type': 'boolean'}},
+    'required': ['nummer', 'omschrijving', 'saldo', 'nummer_toegekend'], 'additionalProperties': False}
 _RUBRIEK = {
     'type': 'object',
     'properties': {'naam': {'type': 'string'}, 'totaal': {'type': 'number'},
@@ -85,7 +86,33 @@ exactheid per rekening zijn belangrijker dan snelheid.
 2. periodes: neem voor elke periode waarvoor het document een DETAIL PER REKENING bevat (rapporteringsbalans,
    detailbalans, proef- en saldibalans) alle rekeningen van balans én resultatenrekening over, gegroepeerd per
    rubriek zoals afgedrukt, met het rubriektotaal zoals afgedrukt. Gebruik het rekeningnummer exact zoals gedrukt
-   (bv. 618000, 440, 5500001). Neem geen vergelijkende cijfers van een vorig jaar over als aparte periode tenzij
+   (bv. 618000, 440, 5500001), met nummer_toegekend = false. Toont het document GEEN rekeningnummers (bv. een
+   interne resultatenrekening of eindbalans met alleen omschrijvingen), neem dan toch elke regel over en ken zelf het
+   passende 6-cijferige rekeningnummer toe volgens het Belgische MAR, met nummer_toegekend = true:
+   - opbrengsten: omzet, verkopen, commissies, bruto winst/brutomarge 700000; andere bedrijfsopbrengsten 740000
+     (ook de tegenboeking van voordelen alle aard); intresten en financiële opbrengsten 750000;
+   - diensten en diverse goederen: huur 610000; gebouw (onderhoud gebouwen/terreinen, energie, water,
+     brandverzekering, schoonmaak) 611000; kantoor, informatica, telefoon, GSM, post, software, bureelkosten,
+     lidgelden, erelonen, cursussen 612000; wagens (brandstof, onderhoud, verzekering, verkeersbelasting,
+     verplaatsingen, taxi) 613000; publiciteit, receptie, restaurant, relatiegeschenken, giften 614000; overige
+     verzekeringen en andere diensten 615000;
+   - alles voor de bestuurder/zaakvoerder (bestuurswedden, sociale bijdragen bestuurder, groepsverzekering of
+     "Top Manager"-verzekering, voordelen alle aard, onkostenvergoedingen bestuurder) 618000, 618100, 618200 …;
+   - personeel: wedden 620000, patronale bijdragen 621000, overige personeelskosten (maaltijdcheques, ecocheques,
+     sociaal secretariaat, woon-werk, vakantiegeld-provisie) 623000;
+   - afschrijvingen 630000; bedrijfsbelastingen en onroerende voorheffing 640000; boetes 643000;
+   - intresten R/C bestuurder 650100 (omschrijving met "R/C"), andere intresten 650000, bankkosten 657000;
+   - belastingen op het resultaat 670000;
+   - balans: goodwill 211000; terreinen 220000; gebouwen en zakelijke rechten zoals vruchtgebruik 221000 of
+     223000; installaties en zonnepanelen op het gebouw 221100; inrichting gebouwen 232000; informatica 240100;
+     meubilair 240000; wagens en fietsen 241000; bij elk actief de geboekte afschrijvingen op hetzelfde nummer met
+     9 op het einde (bv. 221009); klanten 400000; terug te vorderen belastingen 412000; termijndeposito's
+     530000; bankrekeningen 550000, 550100 …; leveranciers 440000; te betalen belastingen 450000; ingehouden
+     bedrijfsvoorheffing 453000; vakantiegeld en bezoldigingen 456000; R/C bestuurder (schuld) 489000 met "R/C"
+     in de omschrijving; over te dragen kosten 490000; verkregen opbrengsten 491000; toe te rekenen kosten
+     492000; eigen vermogen: kapitaal 100000, inbreng buiten kapitaal 110000, reserves 130000–133000
+     (liquidatiereserve 131000, belastingvrije reserve 132000), overgedragen resultaat 140000.
+   Houd het omschrijving-veld gelijk aan de tekst op het document. Neem geen vergelijkende cijfers van een vorig jaar over als aparte periode tenzij
    ze per rekening gedetailleerd zijn. Neem de verkorte NBB-jaarrekening niet over als er een detail per rekening is.
    Tekens: activa positief (afschrijvingen en waardeverminderingen op activa negatief), eigen vermogen en
    schulden positief, opbrengsten positief, kosten negatief, ongeacht hoe het rapport ze toont. Het rubriektotaal
@@ -120,8 +147,11 @@ class Uitlezer:
         cachemap.mkdir(exist_ok=True)
         cache = cachemap / f'{sleutel}.json'
         if cache.exists():
-            self.log(f'{pdf.name}: uit cache')
-            return json.loads(cache.read_text(encoding='utf-8'))
+            vorig = json.loads(cache.read_text(encoding='utf-8'))
+            if not zonder_nummers(vorig):
+                self.log(f'{pdf.name}: uit cache')
+                return vorig
+            self.log(f'{pdf.name}: eerder uitgelezen zonder rekeningnummers, opnieuw …')
         self.log(f'{pdf.name}: uitlezen met {self.model} …')
         document = {'type': 'document',
                     'source': {'type': 'base64', 'media_type': 'application/pdf',
@@ -191,3 +221,12 @@ def controleer(resultaat: dict) -> list[str]:
             if r['rekeningen'] and abs(som - r['totaal']) > 0.011:
                 fouten.append(f"{p['periode_einde']} – {r['naam']}: som {som:,.2f} ≠ totaal {r['totaal']:,.2f}")
     return fouten
+
+
+def zonder_nummers(r: dict) -> bool:
+    """True als een periode rekeningen heeft maar geen enkel bruikbaar rekeningnummer (oude uitlezing)."""
+    for p in r.get('periodes', []):
+        regels = [x for rub in p.get('rubrieken', []) for x in rub.get('rekeningen', [])]
+        if regels and not any(any(c.isdigit() for c in x.get('nummer', '')) for x in regels):
+            return True
+    return False

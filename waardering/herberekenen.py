@@ -79,6 +79,9 @@ def controles(w: dict, kolommen: dict, afschrijvingstabel: bool, balanstotaal: f
     ok, fout = [], []
     f = w.get('Gecorrigeerde vrije cash flow', {})
     for kol, vc in (('H', 'V'), ('K', 'W'), ('N', 'X')):
+        if kolommen.get(kol) and not f.get(f'{kol}12'):
+            fout.append(f'Omzet {kolommen[kol]}: leeg – geen cijfers per rekening ingevuld')
+            continue
         if kolommen.get(kol):
             v = f.get(f'{vc}58')
             (ok if v == 'OK' else fout).append(f'EBITDA {kolommen[kol]}: aansluiting met bedrijfswinst + '

@@ -17,7 +17,7 @@ def antwoord(rubriek_totaal: float) -> dict:
                           'bedrijfswinst': 0, 'winst_voor_belasting': 0, 'balanstotaal': 0,
                           'rubrieken': [{'naam': 'Omzet', 'totaal': rubriek_totaal,
                                          'rekeningen': [{'nummer': '700000', 'omschrijving': 'Verkopen',
-                                                         'saldo': 1000}]}]}],
+                                                         'saldo': 1000, 'nummer_toegekend': False}]}]}],
             'activa': [], 'afschrijvingstabel_totaal_aanschaf': 0, 'personen': [], 'openstaand_totaal': 0,
             'opmerkingen': ''}
 
