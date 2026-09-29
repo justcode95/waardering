@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -135,7 +136,14 @@ exactheid per rekening zijn belangrijker dan snelheid.
 
 class Uitlezer:
     def __init__(self, api_key: str | None = None, model: str = MODEL, log: Callable[[str], None] = print):
-        self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        if api_key:
+            # alleen de sleutel uit Instellingen gebruiken: andere Anthropic-aanmeldingen op de pc (bv. een
+            # ANTHROPIC_AUTH_TOKEN of profiel van Claude Code) mogen niet meegestuurd worden
+            for var in ('ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_PROFILE', 'ANTHROPIC_API_KEY'):
+                os.environ.pop(var, None)
+            self.client = anthropic.Anthropic(api_key=''.join(api_key.split()))
+        else:
+            self.client = anthropic.Anthropic()
         self.model = model
         self.log = log
         self.kost = 0.0
@@ -230,3 +238,21 @@ def zonder_nummers(r: dict) -> bool:
         if regels and not any(any(c.isdigit() for c in x.get('nummer', '')) for x in regels):
             return True
     return False
+
+
+def uitleg_fout(e: Exception) -> str:
+    """Begrijpelijke foutmelding voor het venster, met de technische details erbij."""
+    detail = f'{type(e).__name__}: {e}'
+    status = getattr(e, 'status_code', None)
+    rid = getattr(getattr(e, 'response', None), 'headers', {}).get('request-id') if hasattr(e, 'response') else None
+    if status:
+        detail += f' (HTTP {status}' + (f', request-id {rid}' if rid else '') + ')'
+    if isinstance(e, anthropic.AuthenticationError) or status == 401 or 'credential' in str(e).lower():
+        return ('De API-sleutel wordt geweigerd. Maak op console.anthropic.com een nieuwe sleutel en plak die '
+                'bij Instellingen (vak eerst leegmaken).\n\n' + detail)
+    if isinstance(e, anthropic.PermissionDeniedError) or status == 403:
+        return 'De API-sleutel heeft geen toegang tot dit model of deze functie.\n\n' + detail
+    if isinstance(e, anthropic.APIConnectionError):
+        return ('Geen verbinding met api.anthropic.com. Blokkeert het kantoornetwerk of een proxy/firewall de '
+                'verbinding? Probeer eventueel via een ander netwerk.\n\n' + detail)
+    return detail

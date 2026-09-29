@@ -272,7 +272,8 @@ class App(tk.Tk):
             try:
                 self.q.put(('klaar', (klaar, taak())))
             except Exception as e:  # noqa: BLE001 - fout tonen aan de gebruiker
-                self.q.put(('fout', e))
+                from .uitlezen import uitleg_fout
+                self.q.put(('fout', uitleg_fout(e)))
         threading.Thread(target=werk, daemon=True).start()
 
     def _poll(self):
