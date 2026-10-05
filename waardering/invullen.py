@@ -306,7 +306,8 @@ class Invuller:
         if b.vastgoed_marktwaarde:
             m.set(f'D{nr(38)}', b.vastgoed_marktwaarde)
             m.set(f'C{nr(39)}', f'd.d. {b.vastgoed_schatting_datum}')
-        # roerende secties
+        # roerende secties: netto boekwaarde per sectie uit de balans
+        bw_sectie = self.balans_per_sectie(groepen, bal)
         for sleutel, first, last, tot, rest in MVA_SECTIES:
             jaren = sorted(groepen[sleutel].items())
             rows = list(range(nr(first), nr(last) + 1))
@@ -327,14 +328,7 @@ class Invuller:
             self.rijen(m, rows[:len(jaren)], False)
             self.rijen(m, rows[max(len(jaren), 1):], True)
             rekeningen = sorted({a.rekening for items in groepen[sleutel].values() for a in items})
-            bw = []
-            for rek in rekeningen:
-                if rek in bal:
-                    bw.append(bal[rek])
-                    af = afschrijvingsrekening(rek, bal)
-                    if af:
-                        bw.append(bal[af])
-            m.set(f'L{nr(tot)}', som_formule(bw) or 0)
+            m.set(f'L{nr(tot)}', som_formule(bw_sectie[sleutel]) or 0)
             if jaren and rekeningen:
                 m.set(f'C{nr(first) - 2}', f'{MVA_TITEL[sleutel]} (#{" / #".join(rekeningen)})'[:80])
         # controleblok
@@ -347,6 +341,34 @@ class Invuller:
         if later:
             self.meldingen.append('Niet opgenomen (investering na afsluitdatum): ' +
                                   '; '.join(f'{a.rekening} {a.omschrijving} {a.datum}' for a in later))
+
+    def balans_per_sectie(self, groepen, bal: dict[str, float]) -> dict[str, list]:
+        """Balansrekeningen 23-27 (aanschaf + afschrijvingen) per MVA-sectie.
+
+        Eerst op exact hetzelfde rekeningnummer als in de afschrijvingstabel; wat overblijft (bv. wanneer de
+        nummers op balans en tabel verschillend werden toegekend) volgens rekeningnummer en omschrijving."""
+        uit: dict[str, list] = defaultdict(list)
+        gebruikt: set[str] = set()
+        for sleutel, *_ in MVA_SECTIES:
+            for rek in sorted({a.rekening for items in groepen[sleutel].values() for a in items}):
+                if rek in bal and rek not in gebruikt:
+                    uit[sleutel].append(bal[rek]); gebruikt.add(rek)
+                    af = afschrijvingsrekening(rek, bal)
+                    if af and af not in gebruikt:
+                        uit[sleutel].append(bal[af]); gebruikt.add(af)
+        titels = self.afsl.titels
+        rest = sorted(k for k in bal if k[:2] in ('23', '24', '25', '26', '27') and k not in gebruikt)
+        for rek in [k for k in rest if not k.endswith('9')] + [k for k in rest if k.endswith('9')]:
+            if rek in gebruikt:
+                continue
+            sleutel = classificeer(rek, titels.get(rek, ''))
+            if sleutel == 'onroerend':
+                sleutel = 'installaties'
+            uit[sleutel].append(bal[rek]); gebruikt.add(rek)
+            af = afschrijvingsrekening(rek, bal) if not rek.endswith('9') else None
+            if af and af not in gebruikt:
+                uit[sleutel].append(bal[af]); gebruikt.add(af)
+        return uit
 
     # ------------------------------------------------------------------ eigen vermogen
     def eigen_vermogen(self):

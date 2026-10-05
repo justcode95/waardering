@@ -239,3 +239,24 @@ def test_lege_omzet_is_een_fout():
     w = {'Gecorrigeerde vrije cash flow': {'H12': 0, 'V58': 'OK'}}
     ok, fout = herberekenen.controles(w, {'H': dt.date(2025, 12, 31)}, False, None)
     assert fout and 'Omzet' in fout[0] and not ok
+
+
+@pytest.mark.skipif(not shutil.which('soffice'), reason='LibreOffice nodig om te herberekenen')
+def test_mva_aansluiting_met_verschillende_rekeningnummers(tmp_path):
+    """Balans en afschrijvingstabel met verschillend toegekende nummers (documenten zonder rekeningnummers)."""
+    andere = {'230000': '231000', '230009': '231009', '240000': '240500', '240009': '240509'}
+
+    def hernummerd(r):
+        for rub in r['periodes'][0]['rubrieken']:
+            for x in rub['rekeningen']:
+                x['nummer'] = andere.get(x['nummer'], x['nummer'])
+        return r
+    d = samenstellen([hernummerd(resultaat(j, o)) for j, o in ((2023, 400000), (2024, 420000), (2025, 450000))]
+                     + [afschrijvingstabel()])
+    b = voorstel(d)
+    b.multiple = 4
+    uit = tmp_path / 'x.xlsx'
+    Invuller(TEMPLATE, d, b, tmp_path / 'werk').vul(uit)
+    w = herberekenen.met_libreoffice(uit)
+    ok, fout = herberekenen.controles(w, b.kolommen, True, 297000)
+    assert not fout, fout
